@@ -171,6 +171,12 @@ See the `LICENSE` file for details.
 
 ## Changelog
 
+### 2.0.2
+
+- Fixed PNG image cache keying only on size (ignoring color count); could return incorrectly quantized images.
+- Removed unused `resize2` library.
+- Migrated linter from TSLint to ESLint (which fixed security warnings from old npm packages being brought in)
+
 ### 2.0.1
 
 - Fixed image caching bug which used the first given input forever on all subsequent API calls.

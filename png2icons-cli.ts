@@ -13,10 +13,6 @@ const argc: number = process.argv.length;
  */
 const cli: string = parse(__filename).name;
 /**
- * Desired output format.
- */
-let outputFormat: string;
-/**
  * Scaling algorithm to use.
  */
 let scalingAlgorithm: number = PNG2ICONS.BICUBIC;
@@ -34,6 +30,7 @@ const scalingAlgorithms = [
     "Bicubic",
     "Bezier",
     "Hermite",
+    "Bicubic (alternate, faster)",
 ];
 
 /**
@@ -41,12 +38,12 @@ const scalingAlgorithms = [
  * @param message The main message to log.
  * @param optionalParams Additional messages to log.
  */
-const consoleLogger: PNG2ICONS.Logger = (message: any, ...optionalParams: any[]) => {
+const consoleLogger: PNG2ICONS.Logger = (message: unknown, ...optionalParams: unknown[]) => {
     // Always log errors, regardless of printInfo. By convention all code must
     // call this method with an Error as the *last* parameter if an error occured.
-    const err: Error = optionalParams[optionalParams.length - 1];
+    const err = optionalParams[optionalParams.length - 1];
     if (err instanceof Error) {
-        console.error(message, ...optionalParams[0], "\n", ...optionalParams.slice(1, optionalParams.length - 1), err.stack);
+        console.error(message, ...(optionalParams[0] as unknown[]), "\n", ...optionalParams.slice(1, optionalParams.length - 1), err.stack);
     } else if (printInfo) {
         console.log(message, ...optionalParams);
     }
@@ -100,8 +97,6 @@ function evalArg(arg: string): void {
         scalingAlgorithm = PNG2ICONS.HERMITE;
     } else if (arg === "-bc2") {
         scalingAlgorithm = PNG2ICONS.BICUBIC2;
-    // } else if (arg === "-bl2") {
-    //     scalingAlgorithm = PNG2ICONS.BILINEAR2;
     } else if (arg === "-i") {
         printInfo = true;
     }
@@ -111,7 +106,10 @@ function evalArg(arg: string): void {
 if ((argc < 5) || (argc > 7)) {
     printUsage();
 }
-outputFormat = process.argv[4];
+/**
+ * Desired output format.
+ */
+const outputFormat: string = process.argv[4];
 if (["-icns", "-ico", "-icop", "-icowe", "-all", "-allp", "-allwe"].indexOf(outputFormat) === -1) {
     printUsage();
 }

@@ -1,5 +1,6 @@
 node_modules
 png2icons-cli.js
+png2icons-cli.d.ts
 png2icons.js
 .vscode
 npm-debug.log

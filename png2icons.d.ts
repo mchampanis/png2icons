@@ -1,4 +1,3 @@
-/// <reference types="node" />
 /**
  * Support of Apple ICNS format is based on https://en.wikipedia.org/wiki/Apple_Icon_Image_format
  *
@@ -38,7 +37,7 @@
 /**
  * Logger function type (compatible with console.log).
  */
-export declare type Logger = (message: any, ...optionalParams: any[]) => void;
+export type Logger = (message: unknown, ...optionalParams: unknown[]) => void;
 /**
  * Set an external logger for log messages from png2icons and UPNG.
  * Note: If no logger is set, *nothing* will ever be logged, not even errors.

@@ -48,7 +48,7 @@ import * as UPNG from "./lib/UPNG";
 /**
  * Logger function type (compatible with console.log).
  */
-export type Logger = (message: any, ...optionalParams: any[]) => void;
+export type Logger = (message: unknown, ...optionalParams: unknown[]) => void;
 /**
  * External log function.
  */
@@ -68,7 +68,7 @@ export function setLogger(logger: Logger): void {
  * @param message Primary log message.
  * @param optionalParams Any number of additional log messages.
  */
-function LogMessage(message: any, ...optionalParams: any[]): void {
+function logMessage(message: unknown, ...optionalParams: unknown[]): void {
     if (logFnc) {
         logFnc("png2icons", message, ...optionalParams);
     }
@@ -113,24 +113,15 @@ export const HERMITE = 4;
  * @see resize4.js
  */
 export const BICUBIC2 = 5;
-/**
- * `Bilinear` resizing interploation algorithm.
- * @see resize4.js
- */
-// export const BILINEAR2 = 6;
 
 /**
  * Simple rectangle.
  */
 interface IRect {
-    // tslint:disable-next-line: completed-docs
-    Left: number;
-    // tslint:disable-next-line: completed-docs
-    Top: number;
-    // tslint:disable-next-line: completed-docs
-    Width: number;
-    // tslint:disable-next-line: completed-docs
-    Height: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
 }
 
 /**
@@ -142,7 +133,7 @@ interface IRect {
  * @returns A new rectangle created from the input parameters.
  */
 function getRect(left: number, top: number, width: number, height: number): IRect {
-    return { Left: left, Top: top, Width: width, Height: height };
+    return { left, top, width, height };
 }
 
 /**
@@ -155,20 +146,20 @@ function getStretchedRect(src: IRect, dst: IRect): IRect {
     let f: number;
     let tmp: number;
     const result: IRect = getRect(0, 0, 0, 0);
-    if ((src.Width / src.Height) >= (dst.Width / dst.Height)) {
-        f = (dst.Width / src.Width);
-        result.Left = 0;
-        result.Width = dst.Width;
-        tmp = Math.floor(src.Height * f);
-        result.Top = Math.floor((dst.Height - tmp) / 2);
-        result.Height = tmp;
+    if ((src.width / src.height) >= (dst.width / dst.height)) {
+        f = (dst.width / src.width);
+        result.left = 0;
+        result.width = dst.width;
+        tmp = Math.floor(src.height * f);
+        result.top = Math.floor((dst.height - tmp) / 2);
+        result.height = tmp;
     } else {
-        f = (dst.Height / src.Height);
-        result.Top = 0;
-        result.Height = dst.Height;
-        tmp = Math.floor(src.Width * f);
-        result.Left = Math.floor((dst.Width - tmp) / 2);
-        result.Width = tmp;
+        f = (dst.height / src.height);
+        result.top = 0;
+        result.height = dst.height;
+        tmp = Math.floor(src.width * f);
+        result.left = Math.floor((dst.width - tmp) / 2);
+        result.width = tmp;
     }
     return result;
 }
@@ -191,19 +182,19 @@ const scaledImageCache: Image[] = [];
  */
 function getScaledImageData(srcImage: Image, destRect: IRect, scalingAlgorithm: number): Uint8Array {
     // Nothing to do
-    if ((srcImage.width === destRect.Width) && (srcImage.height === destRect.Height)) {
+    if ((srcImage.width === destRect.width) && (srcImage.height === destRect.height)) {
         return srcImage.data;
     }
     // Already rescaled
     for (const image of scaledImageCache) {
-        if ((destRect.Width === image.width) && (destRect.Height === image.height)) {
+        if ((destRect.width === image.width) && (destRect.height === image.height)) {
             return image.data;
         }
     }
     const scaleResult: Image = {
-        data: new Uint8Array(destRect.Width * destRect.Height * 4),
-        height: destRect.Height,
-        width: destRect.Width,
+        data: new Uint8Array(destRect.width * destRect.height * 4),
+        height: destRect.height,
+        width: destRect.width,
     };
     if (scalingAlgorithm === NEAREST_NEIGHBOR) {
         Resize.nearestNeighbor(srcImage, scaleResult);
@@ -216,9 +207,7 @@ function getScaledImageData(srcImage: Image, destRect: IRect, scalingAlgorithm: 
     } else if (scalingAlgorithm === HERMITE) {
         Resize.hermiteInterpolation(srcImage, scaleResult);
     } else if (scalingAlgorithm === BICUBIC2) {
-        Resize4.bicubic(srcImage, scaleResult, destRect.Width / srcImage.width);
-    // } else if (scalingAlgorithm === BILINEAR2) {
-    //     Resize4.bilinear(srcImage, scaleResult, destRect.Width / srcImage.width);
+        Resize4.bicubic(srcImage, scaleResult, destRect.width / srcImage.width);
     } else {
         Resize.bicubicInterpolation(srcImage, scaleResult);
     }
@@ -235,14 +224,14 @@ function getScaledImageData(srcImage: Image, destRect: IRect, scalingAlgorithm: 
 function getImageFromPNG(input: Buffer): Image | null {
     try {
         // Decoded PNG image
-        const PNG: UPNG.UPNGImage = UPNG.decode(input);
+        const PNG: UPNG.UPNGImage = UPNG.decode(input as unknown as ArrayBuffer);
         return {
             data: new Uint8Array(UPNG.toRGBA8(PNG)[0]),
             height: PNG.height,
             width: PNG.width,
         };
     } catch (e) {
-        LogMessage("Couldn't decode PNG:", e);
+        logMessage("Couldn't decode PNG:", e);
         return null;
     }
 }
@@ -257,6 +246,8 @@ interface IPNGImage {
     Width: number;
     // tslint:disable-next-line: completed-docs
     Height: number;
+    // tslint:disable-next-line: completed-docs
+    NumColors: number;
 }
 
 /**
@@ -277,7 +268,7 @@ const scaledPNGImageCache: IPNGImage[] = [];
 function getCachedPNG(rgba: ArrayBuffer, width: number, height: number, numOfColors: number) {
     // Already encoded
     for (const image of scaledPNGImageCache) {
-        if ((image.Width === width) && (image.Height === height)) {
+        if ((image.Width === width) && (image.Height === height) && (image.NumColors === numOfColors)) {
             return image.Data;
         }
     }
@@ -286,6 +277,7 @@ function getCachedPNG(rgba: ArrayBuffer, width: number, height: number, numOfCol
         Data: result,
         Width: width,
         Height: height,
+        NumColors: numOfColors,
     });
     return result;
 }
@@ -326,6 +318,7 @@ export function clearCache(): void {
 
 /**
  * Scans through a region of the bitmap, calling a function for each pixel.
+ * @param image The image to scan.
  * @param x The x coordinate to begin the scan at.
  * @param y The y coordiante to begin the scan at.
  * @param w The width of the scan region.
@@ -339,7 +332,6 @@ function scanImage(image: Image,
                    f: (sx: number, sy: number, idx: number) => void): void {
     for (let _y = y; _y < (y + h); _y++) {
         for (let _x = x; _x < (x + w); _x++) {
-            // tslint:disable-next-line:no-bitwise
             const idx = (image.width * _y + _x) << 2;
             f.call(image, _x, _y, idx);
         }
@@ -510,7 +502,7 @@ function appendIcnsChunk(chunkParams: IICNSChunkParams, srcImage: Image, scaling
         // Scale image
         const scaledRawData: Uint8Array = getScaledImageData(srcImage, icnsChunkRect, scalingAlgorithm);
         // Icon buffer
-        let encodedIcon: ArrayBuffer;
+        let encodedIcon: ArrayBuffer | Uint8Array | Buffer;
         // Header bytes or every icon
         const iconHeader: Buffer = Buffer.alloc(8);
         // Write icon header, eg 'ic10' + (length of icon + icon header length)
@@ -519,9 +511,9 @@ function appendIcnsChunk(chunkParams: IICNSChunkParams, srcImage: Image, scaling
         switch (chunkParams.Format) {
             case IconFormat.PNG:
                 encodedIcon = getCachedPNG(
-                    scaledRawData.buffer,
-                    icnsChunkRect.Width,
-                    icnsChunkRect.Height,
+                    scaledRawData.buffer as ArrayBuffer,
+                    icnsChunkRect.width,
+                    icnsChunkRect.height,
                     numOfColors,
                 );
                 break;
@@ -545,11 +537,11 @@ function appendIcnsChunk(chunkParams: IICNSChunkParams, srcImage: Image, scaling
         // Size of chunk = encoded icon size + icon header length
         iconHeader.writeUInt32BE(encodedIcon.byteLength + 8, 4);
         return Buffer.concat(
-            [outBuffer, iconHeader, Buffer.from(encodedIcon)],
+            [outBuffer, iconHeader, Buffer.from(encodedIcon as unknown as ArrayBuffer)],
             outBuffer.length + iconHeader.length + encodedIcon.byteLength,
         );
     } catch (e) {
-        LogMessage("Could't append ICNS chunk", e);
+        logMessage("Could't append ICNS chunk", e);
         return null;
     }
 }
@@ -621,11 +613,11 @@ export function createICNS(input: Buffer, scalingAlgorithm: number, numOfColors:
         if (!outBuffer) {
             return null;
         }
-        LogMessage(`wrote type ${chunkParams.OSType} for size ${chunkParams.Info} with ${chunkParams.Size} pixels`);
+        logMessage(`wrote type ${chunkParams.OSType} for size ${chunkParams.Info} with ${chunkParams.Size} pixels`);
     }
     // Write total file size at offset 4 of output and return final result
     outBuffer.writeUInt32BE(outBuffer.length, 4);
-    LogMessage("done");
+    logMessage("done");
     return outBuffer;
 }
 
@@ -812,16 +804,16 @@ export function createICO(input: Buffer, scalingAlgorithm: number,
         // Get scaled raw image
         const scaledRawImage: Image = {
             data: getScaledImageData(srcImage, icoChunkRect, scalingAlgorithm),
-            height: icoChunkRect.Height,
-            width: icoChunkRect.Width,
+            height: icoChunkRect.height,
+            width: icoChunkRect.width,
         };
         // Make icon
         let formatInfo: string;
         // In Windows executable mode use PNG only for sizes >= 64.
-        if (PNG || (forWinExe && ([256, 128, 96, 72, 64].indexOf(icoChunkRect.Height) !== -1))) {
+        if (PNG || (forWinExe && ([256, 128, 96, 72, 64].indexOf(icoChunkRect.height) !== -1))) {
             formatInfo = "png";
             const encodedIcon = getCachedPNG(
-                scaledRawImage.data.buffer,
+                scaledRawImage.data.buffer as ArrayBuffer,
                 scaledRawImage.width,
                 scaledRawImage.height,
                 (numOfColors < 0) ? 0 : ((numOfColors > MAX_COLORS) ? MAX_COLORS : numOfColors),
@@ -853,8 +845,8 @@ export function createICO(input: Buffer, scalingAlgorithm: number,
             totalLength += iconDirEntry.length + bmpInfoHeader.length + DIB.length;
             chunkOffset += bmpInfoHeader.length + DIB.length;
         }
-        LogMessage(`wrote ${formatInfo} icon for size ${icoChunkSize}`);
+        logMessage(`wrote ${formatInfo} icon for size ${icoChunkSize}`);
     }
-    LogMessage(`done`);
+    logMessage(`done`);
     return Buffer.concat(icoDirectory.concat(icoChunkImages), totalLength);
 }

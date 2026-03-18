@@ -15,7 +15,7 @@ export declare interface UPNGImage {
     height: number;
     depth: number;
     ctype: CTYPE;
-    // tslint:disable-next-line:no-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     frames: any[];
     tabs: {};
     data: ArrayBuffer;
