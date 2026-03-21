@@ -43,7 +43,7 @@ const consoleLogger: PNG2ICONS.Logger = (message: unknown, ...optionalParams: un
     // call this method with an Error as the *last* parameter if an error occured.
     const err = optionalParams[optionalParams.length - 1];
     if (err instanceof Error) {
-        console.error(message, ...(optionalParams[0] as unknown[]), "\n", ...optionalParams.slice(1, optionalParams.length - 1), err.stack);
+        console.error(message, ...optionalParams.slice(0, optionalParams.length - 1), "\n", err.stack);
     } else if (printInfo) {
         console.log(message, ...optionalParams);
     }

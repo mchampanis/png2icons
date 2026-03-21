@@ -165,30 +165,31 @@ function getStretchedRect(src: IRect, dst: IRect): IRect {
 }
 
 /**
- * Holds already scaled images (raw pixels).
+ * Holds already scaled images (raw pixels), keyed by size and scaling algorithm.
  */
-const scaledImageCache: Image[] = [];
+const scaledImageCache: Array<{ image: Image; algorithm: number }> = [];
 
 /**
  * Scale a source image to fit into a new given size. The result of the scaling
  * is put to a cache. If the cache already contains a scaled image of the same
- * size this is returned immediately instead. Scaling also isn't done if the
+ * size and algorithm this is returned immediately instead. Scaling also isn't done if the
  * source and destination rectangles are the same.
  * @see resize.js
  * @param srcImage Source image.
  * @param destRect Destination rectangle to fit the rescaled image into.
  * @param scalingAlgorithm Scaling method (one of the constants NEAREST_NEIGHBOR, BILINEAR, ...).
- * @returns Uint8Array The rescaled image.
+ * @returns Uint8Array The rescaled image. When no scaling is needed the source image's data buffer
+ *          is returned directly (no copy), so callers must not mutate the result.
  */
 function getScaledImageData(srcImage: Image, destRect: IRect, scalingAlgorithm: number): Uint8Array {
     // Nothing to do
     if ((srcImage.width === destRect.width) && (srcImage.height === destRect.height)) {
         return srcImage.data;
     }
-    // Already rescaled
-    for (const image of scaledImageCache) {
-        if ((destRect.width === image.width) && (destRect.height === image.height)) {
-            return image.data;
+    // Already rescaled with same algorithm
+    for (const entry of scaledImageCache) {
+        if ((destRect.width === entry.image.width) && (destRect.height === entry.image.height) && (scalingAlgorithm === entry.algorithm)) {
+            return entry.image.data;
         }
     }
     const scaleResult: Image = {
@@ -211,7 +212,7 @@ function getScaledImageData(srcImage: Image, destRect: IRect, scalingAlgorithm: 
     } else {
         Resize.bicubicInterpolation(srcImage, scaleResult);
     }
-    scaledImageCache.push(scaleResult);
+    scaledImageCache.push({ image: scaleResult, algorithm: scalingAlgorithm });
     return scaleResult.data;
 }
 
@@ -237,23 +238,9 @@ function getImageFromPNG(input: Buffer): Image | null {
 }
 
 /**
- * An already PNG encoded image.
- */
-interface IPNGImage {
-    // tslint:disable-next-line: completed-docs
-    Data: ArrayBuffer;
-    // tslint:disable-next-line: completed-docs
-    Width: number;
-    // tslint:disable-next-line: completed-docs
-    Height: number;
-    // tslint:disable-next-line: completed-docs
-    NumColors: number;
-}
-
-/**
  * Holds already scaled images (PNG encoded).
  */
-const scaledPNGImageCache: IPNGImage[] = [];
+const scaledPNGImageCache: Array<{ Data: ArrayBuffer; Width: number; Height: number; NumColors: number }> = [];
 
 /**
  * Encode a raw RGBA image to PNG. The result of the encoding is put to a cache.
@@ -309,6 +296,13 @@ function checkCache(image: Buffer): void {
 
 /**
  * Clears both image caches (input PNG and scaled images).
+ * The cache is keyed on the input buffer contents, so it is invalidated automatically when a
+ * different image is passed to `createICNS` or `createICO`. Call this function explicitly when
+ * the same image will not be needed again and you want to free memory, or to be safe when calling
+ * the library from an async request handler where multiple requests may share the same Node.js
+ * process - since all processing is synchronous there is no interleaving risk within a single
+ * call, but calling `clearCache` at the start or end of each request avoids one request's cached
+ * state persisting unexpectedly into the next.
  */
 export function clearCache(): void {
     scaledPNGImageCache.length = 0;
@@ -350,9 +344,7 @@ function blit(source: Image, target: Image, x: number, y: number) {
     y = Math.round(y);
     scanImage(source, 0, 0, source.width, source.height, (sx: number, sy: number, idx: number) => {
         if ((x + sx >= 0) && (y + sy >= 0) && (target.width - x - sx > 0) && (target.height - y - sy > 0)) {
-            // tslint:disable-next-line:no-bitwise
             const destIdx = (target.width * (y + sy) + (x + sx)) << 2;
-            // const destIdx = getPixelIndex(target, x + sx, y + sy);
             target.data[destIdx] = source.data[idx];
             target.data[destIdx + 1] = source.data[idx + 1];
             target.data[destIdx + 2] = source.data[idx + 2];
@@ -384,7 +376,7 @@ function getQuadraticImage(image: Image): Image {
         blitX = 0;
         blitY = (image.width - image.height) / 2;
     }
-    const result: Image | null = {
+    const result: Image = {
         data: new Uint8Array(edgeLength * edgeLength * 4),
         height: edgeLength,
         width: edgeLength,
@@ -404,7 +396,7 @@ function getImageChannel(image: Uint8Array, bpp: number, channelIndex: number): 
     const channel: Buffer = Buffer.alloc(image.length / bpp);
     const length: number = image.length;
     let outPos: number = 0;
-    for (let i = channelIndex; i < length; i = i + 4) {
+    for (let i = channelIndex; i < length; i = i + bpp) {
         channel.writeUInt8(image[i], outPos++);
     }
     return channel;
@@ -717,13 +709,16 @@ function getDIB(image: Image): Buffer {
     const DIB: Buffer = Buffer.alloc(image.data.length);
     // Mask data
     const maskSize: number = getMaskSize(image.width, image.height);
-    let maskBits: number[] = [];
     // Change order from lower to top
     const bytesPerPixel: number = 4;
     const columns: number = image.width * bytesPerPixel;
     const rows: number = image.height * columns;
     const end: number = rows - columns;
+    // Collect mask bits one row at a time so the rows can be reversed to match the
+    // bottom-up order required by the DIB format (same as the color data below).
+    const maskRows: number[][] = [];
     for (let row = 0; row < rows; row += columns) {
+        const rowMask: number[] = [];
         for (let col = 0; col < columns; col += bytesPerPixel) {
             // Swap pixels from RGBA to BGRA
             let pos = row + col;
@@ -736,11 +731,15 @@ function getDIB(image: Image): Buffer {
             DIB.writeUInt8(g, pos + 1);
             DIB.writeUInt8(r, pos + 2);
             DIB.writeUInt8(a, pos + 3);
-            // Store mask bit
-            maskBits.push(bitmap[pos + 3] === 0 ? 1 : 0);
+            rowMask.push(a === 0 ? 1 : 0);
         }
-        const padding = maskBits.length % 32 ? 32 - maskBits.length % 32 : 0;
-        maskBits = maskBits.concat(Array(padding).fill(0));
+        const padding = rowMask.length % 32 ? 32 - rowMask.length % 32 : 0;
+        maskRows.push(padding > 0 ? rowMask.concat(Array(padding).fill(0)) : rowMask);
+    }
+    maskRows.reverse();
+    let maskBits: number[] = [];
+    for (const rowMask of maskRows) {
+        maskBits = maskBits.concat(rowMask);
     }
     // Create mask from mask bits
     const mask: Buffer[] = [];
