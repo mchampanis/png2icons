@@ -171,6 +171,13 @@ See the `LICENSE` file for details.
 
 ## Changelog
 
+### 2.0.3
+
+- Fix getDIB AND mask row order
+- Fix getScaledImageData cache ignoring scaling algorithm
+- Fix getImageChannel loop stride: i + 4 should be i + bpp
+- Fix consoleLogger error spread: optionalParams[0] as unknown[] would spread a string char-by-char
+
 ### 2.0.2
 
 - Fixed PNG image cache keying only on size (ignoring color count); could return incorrectly quantized images.
